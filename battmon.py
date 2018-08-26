@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 # Battmon - A simple battery monitoring tool for Linux-based operating systems
 # Umesh Padia, 2018
 
@@ -8,7 +10,7 @@
 #   * For each power supply <supply>/type will be read to determine whether
 #   * the source is a battery. If so, the current time, serial number, 
 #   * charging state, and power level will be logged in /var/log/battmon/
-#   * for each battery.
+#   * for each battery as <manufacturer>_<model>_<serial>.log .
 # Cron will be used to call this procedure on a regular basis (5 min).
 # The program will be called using the --log option
 
@@ -19,11 +21,19 @@
 # as ACPI information was moved from /proc/power_supply to 
 # /sys/class/poewr_supply
 
+# Kernel specifications for /sys/class/power_supply: 
+# https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-power
+
+# TODO: tolerate missing information
+
 import os
 import sys
+import datetime
 import time
 import csv
 import argparse
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 POWER_SUPPLY_PATH = "/sys/class/power_supply/"
@@ -55,7 +65,12 @@ def log_battery_state():
             # voltage_min = read_path(os.path.join(supply_path, "voltage_min"))
 
             capacity = read_path(os.path.join(supply_path, "capacity"))
-            status = read_path(os.path.join(supply_path, "status"))
+
+            # according to spec, possible statuses are: Unknown, Charging, 
+            # Discharging, Not charging, Full . We will store the first letter
+            # (capital) 
+
+            status = read_path(os.path.join(supply_path, "status"))[0].upper() 
             manufacturer = read_path(os.path.join(supply_path, "manufacturer"))
             model_name = read_path(os.path.join(supply_path, "model_name"))
             serial_number = read_path(os.path.join(supply_path, "serial_number"))
@@ -69,8 +84,25 @@ def log_battery_state():
                 writer.writerow(fields)
 
 def graph_battery():
-    pass
-
+    logfiles = [f for f in os.listdir(LOG_PATH) if os.path.isfile(os.path.join(LOG_PATH, f))]
+    series = []
+    for logfile in logfiles:
+        reader = csv.reader(open(os.path.join(LOG_PATH, logfile), 'r'))
+        time = []
+        capacity = []
+        for row in reader:
+            time.append(datetime.datetime.fromtimestamp(int(row[0]) / 1000.0))
+            capacity.append(int(row[2]))
+        series.append([os.path.basename(logfile), time,capacity])
+        title = max(time)
+    for s in series:
+        plt.plot(s[1], s[2], label=s[0])
+    plt.xlabel("Date")
+    plt.ylabel("Charge (%)")
+    plt.title("Last updated: " + str(title))
+    plt.legend()
+    plt.show()
 
 log_battery_state()
+graph_battery()
 
