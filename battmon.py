@@ -103,6 +103,20 @@ def graph_battery():
     plt.legend()
     plt.show()
 
-log_battery_state()
-graph_battery()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Battmon - A simple battery monitoring tool for Linux-based operating systems")
+    parser.add_argument("--log", action="store_true", help="log current battery charge and status")
+    parser.add_argument("--graph", action="store_true", help="graph battery history")
+    args = parser.parse_args()
+    
+    if args.log:
+        log_battery_state()
+    if args.graph:
+        graph_battery()
+    if (not args.log and not args.graph):
+        parser.print_help()
+
+
+
 
