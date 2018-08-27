@@ -1,0 +1,4 @@
+#!/bin/sh
+crontab -l | grep -v 'battmon --log'  | crontab -
+
+
