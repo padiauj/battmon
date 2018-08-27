@@ -36,18 +36,43 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from PyQt4 import QtGui
-from PyQt4.QtGui import QSizePolicy
+from PyQt4.QtGui import QSizePolicy, QTableWidget, QTableWidgetItem, QHeaderView
+from PyQt4.QtCore import QTimer, Qt
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT
 from matplotlib.figure import Figure
 
+# Fancier styling for the graph
 plt.style.use('ggplot')
 
 POWER_SUPPLY_PATH = "/sys/class/power_supply/"
 LOG_PATH = "/var/log/battmon"
 MILLIS_IN_DAY = 86400000
+BATTERY_DATA_FILES = ["capacity", "status", "technology", "energy_now", "energy_full_design", "voltage_now"]
+BATTERY_NAME_FILES = ["manufacturer", "model_name", "serial_number"]
+
+# How often the GUI will update battery data in milliseconds
+UPDATE_INTERVAL = 5000
 
 millis_time = lambda: int(round(time.time() * 1000))
+
+def title_name(s):
+    return " ".join([x.capitalize() for x in s.split("_")])
+
+# Creates a human readable version of the battery state data
+
+def get_clean_states(data):
+    states = {}
+    for battery in data:
+        states[battery] = {}
+        for field in data[battery]:
+            if ("energy" in field.lower() and data[battery][field] != ""):
+                states[battery][field] = str(int(data[battery][field]) / 1.0e6) + " Wh"
+            elif ("voltage" in field.lower() and data[battery][field] != ""):
+                states[battery][field] = str(int(data[battery][field]) / 1.0e6) + " V"
+            else:
+                states[battery][field] = data[battery][field]
+    return states
 
 # Reads the entire contents of the file specified. If no such file exists, an
 # empty string is returned. The contents is stripped of whitespace at the ends.
@@ -60,21 +85,19 @@ def read_path(path):
 # Reads the battery/ies information from POWER_SUPPLY_PATH according to the 
 # kernel specifications and returns a nested dictionary with format:
 # { "<manufacturer>_<model_name>_<serial_number>" : { "capacity" : <capacity>
-# , "status" : <status>}}
+# , "status" : <status>, ... }}
 def get_battery_states():
     # get all supply names
     supplies = list(os.walk(POWER_SUPPLY_PATH))[0][1]
-    battery_data_files = ["capacity", "status"]
-    battery_name_files = ["manufacturer", "model_name", "serial_number"]
     battery_states = {}
     for supply in supplies:
         supply_path = os.path.join(POWER_SUPPLY_PATH, supply)
         type = read_path(os.path.join(supply_path, "type"))
         if (type == "Battery"):
             battery_id =  "_".join([read_path(os.path.join(supply_path, bnf))
-                for bnf in battery_name_files])
+                for bnf in BATTERY_NAME_FILES])
             battery_states[battery_id] = {}
-            for bdf in battery_data_files:
+            for bdf in BATTERY_DATA_FILES:
                 battery_states[battery_id][bdf] = read_path(
                         os.path.join(supply_path, bdf))
     return battery_states
@@ -88,7 +111,6 @@ def log_battery_state():
     states = get_battery_states() 
     time = str(millis_time())
     for battery in states:
-        print(states[battery])
         fields = [time, states[battery]["status"][0].upper(), 
                 states[battery]["capacity"]]
         with open(os.path.join(LOG_PATH, battery + ".log"), 'a') as log:
@@ -141,7 +163,43 @@ class Window(QtGui.QDialog):
         self.toolbar = NavigationToolbar(self.canvas, self)
 
         # set the layout
-        layout = QtGui.QVBoxLayout()
+        main_layout = QtGui.QHBoxLayout() 
+        graph_layout = QtGui.QVBoxLayout() 
+        self.info_layout = QtGui.QVBoxLayout()
+
+        # sizing policies
+        fixed_policy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        hpref_policy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        vpref_policy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+
+        states = get_battery_states() 
+        self.battery_widgets = {}
+        for battery in states:
+            battinfo_gbox = QtGui.QGroupBox("Battery: " +  battery) 
+            battinfo_vbox = QtGui.QVBoxLayout() 
+
+            table = QTableWidget() 
+            table.setRowCount(len(BATTERY_DATA_FILES))
+            table.setColumnCount(2)
+            table.verticalHeader().setVisible(False)
+            table.horizontalHeader().setVisible(False)
+            table.horizontalHeader().setResizeMode(QHeaderView.Stretch)
+            table.verticalHeader().setResizeMode(QHeaderView.Stretch)
+            table.setMinimumHeight(50) 
+            table.setSizePolicy(vpref_policy)
+
+            battinfo_vbox.addWidget(table)
+            progress = QtGui.QProgressBar(self)
+            battinfo_vbox.addWidget(progress)
+            progress.setSizePolicy(hpref_policy)
+
+            self.battery_widgets[battery] = {}
+            self.battery_widgets[battery]["table"] = table
+            self.battery_widgets[battery]["progress"] = progress
+
+            battinfo_gbox.setSizePolicy(vpref_policy)
+            battinfo_gbox.setLayout(battinfo_vbox)
+            self.info_layout.addWidget(battinfo_gbox)
 
         # Radio buttons to restrict timeframe to graph
         timeframe_gbox = QtGui.QGroupBox("Time Frame:") 
@@ -161,39 +219,45 @@ class Window(QtGui.QDialog):
         timeframe_hbox.addWidget(self.month)
         timeframe_hbox.addWidget(self.all)
         timeframe_gbox.setLayout(timeframe_hbox)
-
-        fixed_policy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        hpref_policy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-
         timeframe_gbox.setSizePolicy(fixed_policy)
 
-        states = get_battery_states() 
-        for battery in states:
-            battinfo_gbox = QtGui.QGroupBox("Battery: " +  battery) 
-            battinfo_vbox = QtGui.QVBoxLayout() 
-            battinfo_vbox.addWidget(QtGui.QLabel("Status: " + states[battery]["status"]))
-            progress = QtGui.QProgressBar(self)
-            battinfo_vbox.addWidget(progress)
-            progress.setValue(int(states[battery]["capacity"]))
-            progress.setSizePolicy(hpref_policy)
-            battinfo_gbox.setSizePolicy(hpref_policy)
-            battinfo_gbox.setLayout(battinfo_vbox)
-            layout.addWidget(battinfo_gbox)
+        graph_layout.addWidget(timeframe_gbox)
+        graph_layout.addWidget(self.toolbar)
+        graph_layout.addWidget(self.canvas)
 
-        # fix timeframe and battery information size policy so that they don't
-        # resize when the window resizes
-
-        layout.addWidget(timeframe_gbox)
-        layout.addWidget(self.toolbar)
-        layout.addWidget(self.canvas)
-        self.setLayout(layout)
+        main_layout.addLayout(self.info_layout) 
+        main_layout.addLayout(graph_layout) 
+        main_layout.addWidget(QtGui.QSizeGrip(self), 0, Qt.AlignBottom | Qt.AlignRight)
+        self.setLayout(main_layout)
 
         # Default graph is all data (maybe switch this to weekly to make 
         # an initially quick graph?)
         self.all.setChecked(True)
-        self.plot(millis_time())
+        self.current_offset = millis_time() 
+        self.plot(self.current_offset)
+
+        # fill the widgets with the current battery data 
+        self.update_battery_data() 
+
+
+    def update_battery_data(self):
+        states = get_battery_states()
+        clean_states = get_clean_states(states)
+        for battery in self.battery_widgets:
+            if battery in states:
+                table = self.battery_widgets[battery]["table"]
+                for i, field in enumerate(BATTERY_DATA_FILES):
+                    table.setItem(i, 0, QTableWidgetItem(title_name(field)))
+                    table.setItem(i, 1, QTableWidgetItem(clean_states[battery][field]))
+                progress = self.battery_widgets[battery]["progress"]
+                progress.setValue(int(states[battery]["capacity"]))
+    def update(self):
+        self.update_battery_data() 
+        self.plot(self.current_offset) 
 
     def plot(self, offset):
+        # save what the current offset is for updates
+        self.currrent_offset = offset
         # clear plot
         self.figure.clear() 
         ax = self.figure.add_subplot(111)
@@ -203,7 +267,7 @@ class Window(QtGui.QDialog):
         for battery in history:
             ax.plot(history[battery][0], history[battery][1],
                     label=battery, marker='o')
-        ax.set_xlabel("Date")
+        ax.set_xlabel("Time")
         ax.set_ylabel("Charge")
         self.figure.autofmt_xdate()
         self.figure.legend()
@@ -223,6 +287,11 @@ def main():
         app = QtGui.QApplication(sys.argv)
         main = Window()
         main.show()
+        # fill the widgets with the current battery data every UPDATE_INTERVAL
+        timer = QTimer()
+        timer.timeout.connect(main.update)
+        timer.setInterval(UPDATE_INTERVAL)
+        timer.start()
         sys.exit(app.exec_())
     if (not args.log and not args.graph):
         parser.print_help()
