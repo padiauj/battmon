@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=0.1
+Type=Application
+Name=battmon
+Comment=A simple battery monitoring tool for Linux operating systems
+Exec=battmon --graph
+Icon=/usr/share/icons/gnome/48x48/apps/file-manager.png
+Categories=Utility;
+Terminal=true
+StartupNotify=true
+StartupWMClass=battmon
