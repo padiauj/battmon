@@ -192,6 +192,7 @@ class Window(QtGui.QDialog):
             progress = QtGui.QProgressBar(self)
             battinfo_vbox.addWidget(progress)
             progress.setSizePolicy(hpref_policy)
+            progress.setFormat("%v%")
 
             self.battery_widgets[battery] = {}
             self.battery_widgets[battery]["table"] = table
@@ -250,6 +251,12 @@ class Window(QtGui.QDialog):
                     table.setItem(i, 0, QTableWidgetItem(title_name(field)))
                     table.setItem(i, 1, QTableWidgetItem(clean_states[battery][field]))
                 progress = self.battery_widgets[battery]["progress"]
+                new_capacity = int(states[battery]["capacity"])
+                # contrary to specifications "capacity" can be larger than 100
+                if (new_capacity > 100):
+                    progress.setRange(0,new_capacity) 
+                else:
+                    progress.setRange(0,100) 
                 progress.setValue(int(states[battery]["capacity"]))
     def update(self):
         self.update_battery_data() 

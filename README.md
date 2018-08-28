@@ -9,8 +9,9 @@ A simple battery monitoring tool for Linux operating systems
 ```
 sudo add-apt-repository ppa:padiauj/battmon
 sudo apt-get update
-sudo apt-get install python3-battmon
+sudo apt-get install battmon
 ```
+
 
 ## Manual 
 
@@ -24,6 +25,16 @@ sudo apt-get install python3-battmon
 ```
 make 
 sudo make install 
+```
+
+# Usage
+```
+usage: battmon [-h] [--log] [--graph]
+
+optional arguments:
+  -h, --help  show this help message and exit
+  --log       log current battery charge and status
+  --graph     show battery history graph GUI
 ```
 
 # How it works 

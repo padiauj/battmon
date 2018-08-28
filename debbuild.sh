@@ -7,7 +7,7 @@ DIR=$( dirname $0 )
 cd $DIR
 mkdir debian
 cp build_files/* . 
-mv python3-battmon.p* debian/
+mv battmon.p* debian/
 python3 setup.py --command-packages=stdeb.command  sdist_dsc --package3 battmon bdist_deb
 
 debsign deb_dist/*source.changes
