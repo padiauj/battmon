@@ -5,15 +5,13 @@ A simple battery monitoring tool for Linux operating systems
 ![](http://i.imgur.com/om1NFQn.png)
 
 # Installation
-## Ubuntu (Bionic, Xenial, Precise, Trusty, Cosmic) 
+## Ubuntu (Xenial) 
 ```
 sudo add-apt-repository ppa:padiauj/battmon
 sudo apt-get update
 sudo apt-get install battmon
 ```
-
-
-## Manual 
+## Manual  (all other Linux Distributions) 
 Clone (or download) the repository using:
 
 ```

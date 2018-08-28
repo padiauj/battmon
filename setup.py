@@ -6,7 +6,7 @@ import subprocess
 
 setup(
     name = "battmon",
-    version = "1.1.5",
+    version = "1.1.8",
     author = "Umesh Padia",
     author_email = "umeshpadia1@gmail.com",
     description = "A simple battery monitoring tool for Linux operating systems",
@@ -21,5 +21,11 @@ setup(
     ],
     classifiers=[
         "License :: GNU GPLv3 License",
+    ],
+    install_requires=[
+        "setuptools",
+        "matplotlib",
+        "numpy",
+        "PyQt4",
     ],
 )

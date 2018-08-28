@@ -1,3 +1,3 @@
 include padiauj-battmon.desktop
-include debian/python3-battmon.postinst
-include debian/python3-battmon.prerm
+include debian/battmon.postinst
+include debian/battmon.prerm
