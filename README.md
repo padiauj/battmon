@@ -14,6 +14,13 @@ sudo apt-get install battmon
 
 
 ## Manual 
+Clone (or download) the repository using:
+
+```
+git clone https://github.com/padiauj/battmon.git
+cd battmon
+sudo make install 
+```
 
 ### Dependencies 
 * Python 3
