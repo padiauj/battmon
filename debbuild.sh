@@ -8,15 +8,10 @@ cd $DIR
 mkdir debian
 cp build_files/* . 
 mv python3-battmon.p* debian/
-python3 setup.py --command-packages=stdeb.command bdist_deb
+python3 setup.py --command-packages=stdeb.command  sdist_dsc --package3 battmon bdist_deb
 
-mkdir tmp
-cd tmp
-
-dpkg-source -x ../deb_dist/battmon*.dsc
-cd battmon* 
-debuild -S -sa
-dput ppa:padiauj/battmon ../battmon_*source.changes
+debsign deb_dist/*source.changes
+dput ppa:padiauj/battmon deb_dist/*source.changes
 
 # cleanup 
 cd $DIR
