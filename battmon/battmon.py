@@ -47,20 +47,31 @@ plt.style.use('ggplot')
 
 POWER_SUPPLY_PATH = "/sys/class/power_supply/"
 LOG_PATH = "/var/log/battmon"
-MILLIS_IN_DAY = 86400000
 BATTERY_DATA_FILES = ["capacity", "status", "technology", "energy_now", "energy_full_design", "voltage_now"]
+REQUIRED_DATA_FILES = ["capacity", "status"]
 BATTERY_NAME_FILES = ["manufacturer", "model_name", "serial_number"]
 
 # How often the GUI will update battery data in milliseconds
 UPDATE_INTERVAL = 5000
 
 millis_time = lambda: int(round(time.time() * 1000))
+MILLIS_IN_DAY = 86400000
+MILLIS_IN_WEEK = 7 * MILLIS_IN_DAY
+MILLIS_IN_MONTH = 30 * MILLIS_IN_DAY
+MILLIS_IN_TOTAL = millis_time() 
 
 def title_name(s):
     return " ".join([x.capitalize() for x in s.split("_")])
 
-# Creates a human readable version of the battery state data
+def check_state(battery, battery_state):
+    for attribute in REQUIRED_DATA_FILES:
+        if (battery_state[attribute] == ""):
+            print("Battery " + battery + " is missing attribute" + 
+                    attribute + ".", file=sys.stderr)
+            return False
+    return True
 
+# Creates a human readable version of the battery state data
 def get_clean_states(data):
     states = {}
     for battery in data:
@@ -76,11 +87,16 @@ def get_clean_states(data):
 
 # Reads the entire contents of the file specified. If no such file exists, an
 # empty string is returned. The contents is stripped of whitespace at the ends.
+# Catches IOError if file doesn't exist or is not readable, then exits
 def read_path(path):
-    if (not os.path.isfile(path)):
-        return ""
-    with open(path, 'r') as f:
-        return f.read().strip() 
+    try:
+        if (not os.path.isfile(path)):
+            return ""
+        with open(path, 'r') as f:
+            return f.read().strip() 
+    except IOError:
+        print("Could not read file: " + path + " Exiting ...", file=sys.stderr)
+        sys.exit() 
 
 # Reads the battery/ies information from POWER_SUPPLY_PATH according to the 
 # kernel specifications and returns a nested dictionary with format:
@@ -104,18 +120,24 @@ def get_battery_states():
 
 # Logs the information from get_battery_states() to individual log files for
 # each battery under LOG_PATH
+# Catches IOError if LOG_PATH is unwritable, then exits
 def log_battery_state():
-    # if logging dir does not exist, create it. 
-    if not os.path.exists(LOG_PATH):
-        os.mkdir(LOG_PATH)
     states = get_battery_states() 
     time = str(millis_time())
-    for battery in states:
-        fields = [time, states[battery]["status"][0].upper(), 
-                states[battery]["capacity"]]
-        with open(os.path.join(LOG_PATH, battery + ".log"), 'a') as log:
-            writer = csv.writer(log)
-            writer.writerow(fields)
+    try:
+        # if logging dir does not exist, create it. 
+        if not os.path.exists(LOG_PATH):
+            os.mkdir(LOG_PATH)
+        for battery in states:
+            if (check_state(battery, states[battery])):
+                fields = [time, states[battery]["status"][0].upper(), 
+                        states[battery]["capacity"]]
+                with open(os.path.join(LOG_PATH, battery + ".log"), 'a') as log:
+                    writer = csv.writer(log)
+                    writer.writerow(fields)
+    except IOError:
+        print("Could not write to directory: " + LOG_PATH + " Exiting ...", file=sys.stderr)
+        sys.exit() 
 
 # Retrieves battery history from the logfiles in LOG_PATH
 # Recall that CSV log format is: Time (millis), Status, Capacity. Battery ID 
@@ -211,9 +233,9 @@ class Window(QtGui.QDialog):
         self.all = QtGui.QRadioButton("All")
 
         self.day.clicked.connect(lambda: self.plot(MILLIS_IN_DAY))
-        self.week.clicked.connect(lambda: self.plot(7*MILLIS_IN_DAY))
-        self.month.clicked.connect(lambda: self.plot(30*MILLIS_IN_DAY))
-        self.all.clicked.connect(lambda: self.plot(millis_time()))
+        self.week.clicked.connect(lambda: self.plot(MILLIS_IN_WEEK))
+        self.month.clicked.connect(lambda: self.plot(MILLIS_IN_MONTH))
+        self.all.clicked.connect(lambda: self.plot(MILLIS_IN_TOTAL))
 
         timeframe_hbox.addWidget(self.day)
         timeframe_hbox.addWidget(self.week)
@@ -234,8 +256,7 @@ class Window(QtGui.QDialog):
         # Default graph is all data (maybe switch this to weekly to make 
         # an initially quick graph?)
         self.all.setChecked(True)
-        self.current_offset = millis_time() 
-        self.plot(self.current_offset)
+        self.plot(MILLIS_IN_TOTAL)
 
         # fill the widgets with the current battery data 
         self.update_battery_data() 
@@ -260,20 +281,26 @@ class Window(QtGui.QDialog):
                 progress.setValue(int(states[battery]["capacity"]))
     def update(self):
         self.update_battery_data() 
-        self.plot(self.current_offset) 
+        # There should be a better way to do this 
+        if (self.day.isChecked()):
+            offset = MILLIS_IN_DAY
+        elif (self.day.isChecked()):
+            offset = MILLIS_IN_WEEK
+        elif (self.day.isChecked()):
+            offset = MILLIS_IN_MONTH
+        else:
+            offset = MILLIS_IN_TOTAL
+        self.plot(offset) 
 
     def plot(self, offset):
-        # save what the current offset is for updates
-        self.currrent_offset = offset
         # clear plot
         self.figure.clear() 
         ax = self.figure.add_subplot(111)
         # get battery data from logs
         history = get_battery_history(offset)
-        # plot data
+        # plot data (without markers)
         for battery in history:
-            ax.plot(history[battery][0], history[battery][1],
-                    label=battery, marker='o')
+            ax.plot(history[battery][0], history[battery][1], label=battery)
         ax.set_xlabel("Time")
         ax.set_ylabel("Charge")
         self.figure.autofmt_xdate()
