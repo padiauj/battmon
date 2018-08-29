@@ -27,11 +27,6 @@ sudo make install
 * numpy>=1.14.0
 * PyQt4>=4.11.4
 
-```
-make 
-sudo make install 
-```
-
 # Usage
 ```
 usage: battmon [-h] [--log] [--graph]
