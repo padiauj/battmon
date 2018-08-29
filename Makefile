@@ -31,7 +31,6 @@ submit:
 	debsign deb_dist/*source.changes
 	dput ppa:padiauj/battmon deb_dist/*source.changes
 
-
 clean:
 
 	cd $(DIR)
