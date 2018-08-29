@@ -1,8 +1,8 @@
 # battmon
-A simple battery monitoring tool for Linux operating systems
+A simple battery monitoring tool for Linux operating systems.
 
 ## Screenshot
-![](http://i.imgur.com/om1NFQn.png)
+![](http://i.imgur.com/V4RNRZa.png)
 
 # Installation
 ## Ubuntu (Xenial) 
