@@ -48,7 +48,8 @@ plt.style.use('ggplot')
 POWER_SUPPLY_PATH = "/sys/class/power_supply/"
 LOG_PATH = "/var/log/battmon"
 BATTERY_DATA_FILES = ["capacity", "status", "technology", "energy_now", "energy_full_design", "voltage_now"]
-REQUIRED_DATA_FILES = ["capacity", "status"]
+REQUIRED_DATA_FILES = ["capacity", "status", "energy_now", "energy_full_design", "voltage_now"]
+LOG_FILE_FIELDS = ["time", "status", "capacity", "energy_now", "voltage_now"]
 BATTERY_NAME_FILES = ["manufacturer", "model_name", "serial_number"]
 
 # How often the GUI will update battery data in milliseconds
@@ -71,6 +72,13 @@ def check_state(battery, battery_state):
             return False
     return True
 
+def is_float(s):
+    try: 
+        n = float(s)
+    except ValueError:
+        return False
+    return True
+
 # Creates a human readable version of the battery state data
 def get_clean_states(data):
     states = {}
@@ -78,9 +86,9 @@ def get_clean_states(data):
         states[battery] = {}
         for field in data[battery]:
             if ("energy" in field.lower() and data[battery][field] != ""):
-                states[battery][field] = str(int(data[battery][field]) / 1.0e6) + " Wh"
+                states[battery][field] = str(int(data[battery][field])/ 1.0e6) + " Wh"
             elif ("voltage" in field.lower() and data[battery][field] != ""):
-                states[battery][field] = str(int(data[battery][field]) / 1.0e6) + " V"
+                states[battery][field] = str(int(data[battery][field])/ 1.0e6) + " V"
             else:
                 states[battery][field] = data[battery][field]
     return states
@@ -116,6 +124,7 @@ def get_battery_states():
             for bdf in BATTERY_DATA_FILES:
                 battery_states[battery_id][bdf] = read_path(
                         os.path.join(supply_path, bdf))
+            battery_states[battery_id]["time"] = millis_time() 
     return battery_states
 
 # Logs the information from get_battery_states() to individual log files for
@@ -123,15 +132,13 @@ def get_battery_states():
 # Catches IOError if LOG_PATH is unwritable, then exits
 def log_battery_state():
     states = get_battery_states() 
-    time = str(millis_time())
     try:
         # if logging dir does not exist, create it. 
         if not os.path.exists(LOG_PATH):
             os.mkdir(LOG_PATH)
         for battery in states:
             if (check_state(battery, states[battery])):
-                fields = [time, states[battery]["status"][0].upper(), 
-                        states[battery]["capacity"]]
+                fields = [states[battery][x] for x in LOG_FILE_FIELDS] 
                 with open(os.path.join(LOG_PATH, battery + ".log"), 'a') as log:
                     writer = csv.writer(log)
                     writer.writerow(fields)
@@ -148,17 +155,23 @@ def get_battery_history(offset):
     history = {}
     cutoff = millis_time() - offset
     for logfile in logfiles:
-        reader = csv.reader(open(os.path.join(LOG_PATH, logfile), 'r'))
-        time = []
-        capacity = []
-        for row in reader:
-            timestamp = int(row[0])
-            if (timestamp >= cutoff):
-                # convert UNIX millisecond timestamp to datetime object
-                time.append(
-                        datetime.datetime.fromtimestamp(timestamp / 1000.0))
-                capacity.append(int(row[2]))
-        history[os.path.splitext(logfile)[0].strip()] = (time, capacity)
+        battery_id = os.path.splitext(logfile)[0].strip()
+        data = { x : [] for x in LOG_FILE_FIELDS }
+        with open(os.path.join(LOG_PATH, logfile), 'r') as log:
+            reader = csv.DictReader(log, LOG_FILE_FIELDS, restval=0)
+            for row in reader:
+                for f in row:
+                    if (is_float(row[f])):
+                        row[f] = float(row[f])
+                        if ("energy" in f or "voltage" in f):
+                            row[f] /= 1.0e6
+                if (row["time"] >= cutoff):
+                    # convert UNIX millisecond timestamp to datetime object
+                    row["time"] = datetime.datetime.fromtimestamp(
+                            row["time"] / 1000.0)
+                    for k in row:
+                        data[k].append(row[k])
+            history[battery_id] = data
     return history
 
 # Editing NavigationToolbar2QT to remove extraneous buttons
@@ -196,7 +209,7 @@ class Window(QtGui.QDialog):
 
         states = get_battery_states() 
         self.battery_widgets = {}
-        for battery in states:
+        for battery in sorted(states.keys()):
             battinfo_gbox = QtGui.QGroupBox("Battery: " +  battery) 
             battinfo_vbox = QtGui.QVBoxLayout() 
 
@@ -224,6 +237,25 @@ class Window(QtGui.QDialog):
             battinfo_gbox.setLayout(battinfo_vbox)
             self.info_layout.addWidget(battinfo_gbox)
 
+        # Checkbox to select fields to graph
+        fields_gbox = QtGui.QGroupBox("Show:") 
+        fields_hbox = QtGui.QHBoxLayout() 
+        self.capacity = QtGui.QCheckBox("Capacity")
+        self.voltage = QtGui.QCheckBox("Voltage")
+        self.energy = QtGui.QCheckBox("Energy")
+
+        self.energy.clicked.connect(self.plot)
+        self.voltage.clicked.connect(self.plot)
+        self.capacity.clicked.connect(self.plot)
+
+        fields_hbox.addWidget(self.capacity)
+        fields_hbox.addWidget(self.energy)
+        fields_hbox.addWidget(self.voltage)
+        fields_gbox.setLayout(fields_hbox)
+        fields_gbox.setSizePolicy(fixed_policy)
+
+        graph_layout.addWidget(fields_gbox)
+
         # Radio buttons to restrict timeframe to graph
         timeframe_gbox = QtGui.QGroupBox("Time Frame:") 
         timeframe_hbox = QtGui.QHBoxLayout() 
@@ -232,10 +264,10 @@ class Window(QtGui.QDialog):
         self.month = QtGui.QRadioButton("Month")
         self.all = QtGui.QRadioButton("All")
 
-        self.day.clicked.connect(lambda: self.plot(MILLIS_IN_DAY))
-        self.week.clicked.connect(lambda: self.plot(MILLIS_IN_WEEK))
-        self.month.clicked.connect(lambda: self.plot(MILLIS_IN_MONTH))
-        self.all.clicked.connect(lambda: self.plot(MILLIS_IN_TOTAL))
+        self.day.clicked.connect(self.plot)
+        self.week.clicked.connect(self.plot)
+        self.month.clicked.connect(self.plot)
+        self.all.clicked.connect(self.plot)
 
         timeframe_hbox.addWidget(self.day)
         timeframe_hbox.addWidget(self.week)
@@ -253,13 +285,14 @@ class Window(QtGui.QDialog):
         main_layout.addWidget(QtGui.QSizeGrip(self), 0, Qt.AlignBottom | Qt.AlignRight)
         self.setLayout(main_layout)
 
-        # Default graph is all data (maybe switch this to weekly to make 
-        # an initially quick graph?)
-        self.all.setChecked(True)
-        self.plot(MILLIS_IN_TOTAL)
+        # Default graph is week data
+        self.week.setChecked(True)
+        self.capacity.setChecked(True)
+        self.energy.setChecked(True)
+        self.voltage.setChecked(True)
 
-        # fill the widgets with the current battery data 
-        self.update_battery_data() 
+        # populate initial data
+        self.update() 
 
 
     def update_battery_data(self):
@@ -279,34 +312,51 @@ class Window(QtGui.QDialog):
                 else:
                     progress.setRange(0,100) 
                 progress.setValue(int(states[battery]["capacity"]))
+
     def update(self):
         self.update_battery_data() 
-        # There should be a better way to do this 
+        self.plot() 
+
+    def plot(self):
+        # determine the proper (x-axis range) offset 
         if (self.day.isChecked()):
             offset = MILLIS_IN_DAY
-        elif (self.day.isChecked()):
+        elif (self.week.isChecked()):
             offset = MILLIS_IN_WEEK
-        elif (self.day.isChecked()):
+        elif (self.month.isChecked()):
             offset = MILLIS_IN_MONTH
         else:
             offset = MILLIS_IN_TOTAL
-        self.plot(offset) 
 
-    def plot(self, offset):
+        # determine the fields to plot
+        fields = [] 
+        if (self.capacity.isChecked()):
+            fields.append("capacity")
+        if (self.energy.isChecked()):
+            fields.append("energy_now")
+        if (self.voltage.isChecked()):
+            fields.append("voltage_now")
+
         # clear plot
         self.figure.clear() 
-        ax = self.figure.add_subplot(111)
+        columns = 1
+        rows = len(fields)
+
         # get battery data from logs
         history = get_battery_history(offset)
-        # plot data (without markers)
-        for battery in history:
-            ax.plot(history[battery][0], history[battery][1], label=battery)
-        ax.set_xlabel("Time")
-        ax.set_ylabel("Charge")
-        self.figure.autofmt_xdate()
-        self.figure.legend()
+        for idx, field in enumerate(fields):
+            ax = self.figure.add_subplot(rows, columns, idx+1)
+            for battery in sorted(history.keys()):
+                if (idx == 0):
+                    ax.plot(history[battery]["time"], history[battery][field], label=battery)
+                else:
+                    ax.plot(history[battery]["time"], history[battery][field])
+                ax.set_xlabel("Time")
+                ax.set_ylabel(title_name(field).split(" ")[0])
+            self.figure.autofmt_xdate()
 
         # refresh canvas
+        self.figure.legend()
         self.canvas.draw()
 
 def main():
