@@ -24,7 +24,6 @@
 # Kernel specifications for /sys/class/power_supply: 
 # https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-power
 
-# TODO: tolerate missing information, and error correcting code 
 
 import os
 import sys
