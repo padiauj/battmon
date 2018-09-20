@@ -292,6 +292,7 @@ class Window(QtGui.QDialog):
 
         # populate initial data
         self.update() 
+        self.plot() 
 
 
     def update_battery_data(self):
@@ -314,7 +315,8 @@ class Window(QtGui.QDialog):
 
     def update(self):
         self.update_battery_data() 
-        self.plot() 
+        # don't replot every five seconds (messes up zoom and home button) 
+        # self.plot() 
 
     def plot(self):
         # determine the proper (x-axis range) offset 
@@ -347,9 +349,9 @@ class Window(QtGui.QDialog):
             ax = self.figure.add_subplot(rows, columns, idx+1)
             for battery in sorted(history.keys()):
                 if (idx == 0):
-                    ax.plot(history[battery]["time"], history[battery][field], label=battery)
+                    ax.plot(history[battery]["time"], history[battery][field], label=battery, marker='o', markersize=2)
                 else:
-                    ax.plot(history[battery]["time"], history[battery][field])
+                    ax.plot(history[battery]["time"], history[battery][field], marker='o', markersize=2)
                 ax.set_xlabel("Time")
                 ax.set_ylabel(title_name(field).split(" ")[0])
             self.figure.autofmt_xdate()

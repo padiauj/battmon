@@ -6,7 +6,7 @@ import subprocess
 
 setup(
     name = "battmon",
-    version = "1.3.0",
+    version = "1.3.2",
     author = "Umesh Padia",
     author_email = "umeshpadia1@gmail.com",
     description = "A simple battery monitoring tool for Linux operating systems",
